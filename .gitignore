@@ -1,0 +1,9 @@
+credentials/
+venv/
+temp/
+static/previews/
+output/
+estado.json
+__pycache__/
+*.pyc
+*.pickle

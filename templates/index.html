@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Validador de Facturas — Caja Diaria</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0f1117;
+    --surface:   #171b26;
+    --card:      #1e2333;
+    --border:    #2a2f42;
+    --border2:   #353c54;
+    --text:      #e2e6f0;
+    --muted:     #7a8299;
+    --accent:    #4f8ef7;
+    --accent2:   #3a72d8;
+    --ok:        #3ecf8e;
+    --warn:      #f5a623;
+    --danger:    #f04438;
+    --special:   #9b6eff;
+    --mono:      'IBM Plex Mono', monospace;
+    --sans:      'IBM Plex Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    letter-spacing: .05em;
+  }
+
+  .logo span { color: var(--muted); }
+
+  .header-stats {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .stat-pill {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-family: var(--mono);
+  }
+
+  .stat-pill .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+  }
+
+  .dot-ok      { background: var(--ok); }
+  .dot-warn    { background: var(--warn); }
+  .dot-special { background: var(--special); }
+
+  /* ── Toolbar ── */
+  .toolbar {
+    padding: 1rem 2rem;
+    display: flex;
+    gap: .75rem;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-wrap: wrap;
+  }
+
+  .toolbar-label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    margin-right: .5rem;
+  }
+
+  .filter-btn {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 5px 14px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all .15s;
+  }
+
+  .filter-btn:hover, .filter-btn.active {
+    background: var(--card);
+    border-color: var(--border2);
+    color: var(--text);
+  }
+
+  .filter-btn.active { color: var(--accent); border-color: var(--accent); }
+
+  .spacer { flex: 1; }
+
+  .btn-confirm {
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 24px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background .15s, transform .1s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn-confirm:hover { background: var(--accent2); }
+  .btn-confirm:active { transform: scale(.98); }
+  .btn-confirm:disabled { background: var(--border2); color: var(--muted); cursor: default; }
+
+  /* ── Grid de facturas ── */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    padding: 0;
+  }
+
+  /* ── Card ── */
+  .card {
+    background: var(--card);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    transition: background .15s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card:hover { background: #222840; }
+
+  .card.excluida { opacity: .35; }
+
+  .card-stripe {
+    height: 3px;
+    background: var(--border2);
+    flex-shrink: 0;
+  }
+
+  .card.confianza-alta  .card-stripe { background: var(--ok); }
+  .card.confianza-baja  .card-stripe { background: var(--warn); }
+  .card.confianza-corregida .card-stripe { background: var(--accent); }
+  .card.especial        .card-stripe { background: var(--special); }
+
+  /* Preview imagen */
+  .preview-wrap {
+    width: 100%;
+    height: 200px;
+    overflow: hidden;
+    background: #0a0d14;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    cursor: zoom-in;
+    position: relative;
+  }
+
+  .preview-wrap img {
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+    transition: transform .3s;
+  }
+
+  .preview-wrap:hover img { transform: scale(1.04); }
+
+  .badge-estado {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: 500;
+    letter-spacing: .04em;
+  }
+
+  .badge-ok       { background: rgba(62,207,142,.15); color: var(--ok); border: 1px solid rgba(62,207,142,.3); }
+  .badge-warn     { background: rgba(245,166,35,.15); color: var(--warn); border: 1px solid rgba(245,166,35,.3); }
+  .badge-corr     { background: rgba(79,142,247,.15); color: var(--accent); border: 1px solid rgba(79,142,247,.3); }
+  .badge-especial { background: rgba(155,110,255,.15); color: var(--special); border: 1px solid rgba(155,110,255,.3); }
+
+  /* Campos editables */
+  .card-body { padding: 14px 16px; flex: 1; }
+
+  .field-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .field-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    width: 56px;
+    flex-shrink: 0;
+    text-transform: uppercase;
+  }
+
+  .field-input {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 5px 10px;
+    border-radius: 4px;
+    transition: border-color .15s;
+    width: 100%;
+  }
+
+  .field-input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .field-input.vacio { border-color: var(--warn); background: rgba(245,166,35,.05); }
+
+  /* Acciones de card */
+  .card-actions {
+    padding: 10px 16px 14px;
+    display: flex;
+    gap: 8px;
+  }
+
+  .btn-small {
+    font-size: 11px;
+    font-family: var(--sans);
+    padding: 5px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    transition: all .15s;
+    flex: 1;
+    text-align: center;
+  }
+
+  .btn-small:hover { color: var(--text); border-color: var(--border2); background: var(--surface); }
+
+  .btn-especial.activo { color: var(--special); border-color: var(--special); background: rgba(155,110,255,.08); }
+  .btn-excluir.activo  { color: var(--danger);  border-color: var(--danger);  background: rgba(240,68,56,.08); }
+
+  /* ── Modal zoom ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.85);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-overlay.visible { display: flex; }
+
+  .modal-img {
+    max-width: 90vw;
+    max-height: 90vh;
+    border-radius: 4px;
+    box-shadow: 0 24px 80px rgba(0,0,0,.6);
+  }
+
+  .modal-close {
+    position: absolute;
+    top: 20px;
+    right: 28px;
+    font-size: 28px;
+    color: #fff;
+    cursor: pointer;
+    background: none;
+    border: none;
+    opacity: .7;
+  }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    padding: 14px 20px;
+    font-size: 13px;
+    max-width: 360px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.4);
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all .3s cubic-bezier(.16,1,.3,1);
+    z-index: 300;
+  }
+
+  .toast.visible { transform: translateY(0); opacity: 1; }
+  .toast.exito  { border-color: var(--ok); }
+  .toast.error  { border-color: var(--danger); }
+
+  .toast-title { font-weight: 600; margin-bottom: 4px; }
+  .toast-body  { color: var(--muted); font-size: 12px; line-height: 1.5; }
+
+  /* ── Empty state ── */
+  .empty {
+    grid-column: 1/-1;
+    text-align: center;
+    padding: 4rem;
+    color: var(--muted);
+  }
+
+  .empty h2 { font-size: 18px; margin-bottom: .5rem; color: var(--text); }
+  .empty code { font-family: var(--mono); background: var(--surface); padding: 2px 8px; border-radius: 3px; font-size: 13px; }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    .grid { grid-template-columns: 1fr; }
+    header { padding: 0 1rem; }
+    .toolbar { padding: .75rem 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">CAJA<span>/</span>VALIDADOR</div>
+  <div class="header-stats">
+    <div class="stat-pill"><span class="dot dot-ok"></span> {{ total - con_error }} ok</div>
+    <div class="stat-pill"><span class="dot dot-warn"></span> {{ con_error }} revisar</div>
+    <div class="stat-pill"><span class="dot dot-special"></span> {{ especiales }} especiales</div>
+  </div>
+</header>
+
+<div class="toolbar">
+  <span class="toolbar-label">Filtrar</span>
+  <button class="filter-btn active" onclick="filtrar('todas')">Todas</button>
+  <button class="filter-btn" onclick="filtrar('revisar')">⚠ Revisar</button>
+  <button class="filter-btn" onclick="filtrar('especiales')">★ Especiales</button>
+  <button class="filter-btn" onclick="filtrar('excluidas')">✕ Excluidas</button>
+  <div class="spacer"></div>
+  <button class="btn-confirm" id="btn-confirmar" onclick="confirmarTodo()">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+    Confirmar y mover archivos
+  </button>
+</div>
+
+<div class="grid" id="grid">
+  {% for f in facturas %}
+  <div class="card confianza-{{ f.confianza }}{% if f.especial %} especial{% endif %}{% if f.excluir %} excluida{% endif %}"
+       id="card-{{ f.id }}" data-confianza="{{ f.confianza }}" data-especial="{{ f.especial|lower }}" data-excluir="{{ f.excluir|lower }}">
+
+    <div class="card-stripe"></div>
+
+    <div class="preview-wrap" onclick="zoomImg('{{ f.preview }}')">
+      {% if f.preview %}
+        <img src="/static/{{ f.preview }}" alt="Factura {{ f.numero_factura or '?' }}" loading="lazy">
+      {% else %}
+        <div style="padding:2rem;color:var(--muted);font-size:12px;font-family:var(--mono)">sin preview</div>
+      {% endif %}
+      <span class="badge-estado {% if f.especial %}badge-especial{% elif f.confianza == 'alta' %}badge-ok{% elif f.confianza == 'corregida' %}badge-corr{% else %}badge-warn{% endif %}">
+        {% if f.especial %}★ ESPECIAL{% elif f.confianza == 'alta' %}✓ AUTO{% elif f.confianza == 'corregida' %}✎ EDITADA{% else %}⚠ REVISAR{% endif %}
+      </span>
+    </div>
+
+    <div class="card-body">
+      <div class="field-row">
+        <span class="field-label">Factura</span>
+        <input class="field-input {% if not f.numero_factura %}vacio{% endif %}"
+               id="num-{{ f.id }}"
+               value="{{ f.numero_factura or '' }}"
+               placeholder="Ej: H948"
+               onchange="guardarCampo({{ f.id }}, 'numero_factura', this.value)">
+      </div>
+      <div class="field-row">
+        <span class="field-label">Cliente</span>
+        <input class="field-input {% if not f.codigo_cliente %}vacio{% endif %}"
+               id="cli-{{ f.id }}"
+               value="{{ f.codigo_cliente or '' }}"
+               placeholder="Cód. cliente"
+               onchange="guardarCampo({{ f.id }}, 'codigo_cliente', this.value)">
+      </div>
+      <div class="field-row">
+        <span class="field-label">Fecha</span>
+        <input class="field-input {% if not f.fecha %}vacio{% endif %}"
+               id="fecha-{{ f.id }}"
+               value="{{ f.fecha or '' }}"
+               placeholder="YYYY-MM-DD"
+               onchange="guardarCampo({{ f.id }}, 'fecha', this.value)">
+      </div>
+    </div>
+
+    <div class="card-actions">
+      <button class="btn-small btn-especial {% if f.especial %}activo{% endif %}"
+              id="esp-{{ f.id }}"
+              onclick="toggleEspecial({{ f.id }})">★ Especial</button>
+      <button class="btn-small btn-excluir {% if f.excluir %}activo{% endif %}"
+              id="exc-{{ f.id }}"
+              onclick="toggleExcluir({{ f.id }})">✕ Excluir</button>
+    </div>
+  </div>
+  {% else %}
+  <div class="empty">
+    <h2>No hay facturas procesadas</h2>
+    <p>Ejecuta primero: <code>python pipeline.py ruta/al/caja.pdf</code></p>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Modal zoom -->
+<div class="modal-overlay" id="modal" onclick="cerrarModal()">
+  <button class="modal-close" onclick="cerrarModal()">✕</button>
+  <img class="modal-img" id="modal-img" src="" alt="">
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast">
+  <div class="toast-title" id="toast-title"></div>
+  <div class="toast-body" id="toast-body"></div>
+</div>
+
+<script>
+// ── Filtros ────────────────────────────────────────────────────────
+function filtrar(tipo) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+
+  document.querySelectorAll('.card').forEach(card => {
+    const confianza = card.dataset.confianza;
+    const especial  = card.dataset.especial === 'true';
+    const excluir   = card.dataset.excluir  === 'true';
+
+    let visible = true;
+    if (tipo === 'revisar')   visible = confianza === 'baja';
+    if (tipo === 'especiales') visible = especial;
+    if (tipo === 'excluidas') visible = excluir;
+
+    card.style.display = visible ? '' : 'none';
+  });
+}
+
+// ── Guardar campo ──────────────────────────────────────────────────
+async function guardarCampo(id, campo, valor) {
+  const body = {};
+  body[campo] = valor;
+  await fetch(`/api/actualizar/${id}`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body)
+  });
+
+  const card = document.getElementById(`card-${id}`);
+  card.dataset.confianza = 'corregida';
+  card.className = card.className.replace(/confianza-\w+/, 'confianza-corregida');
+
+  const badge = card.querySelector('.badge-estado');
+  badge.className = 'badge-estado badge-corr';
+  badge.textContent = '✎ EDITADA';
+
+  const input = card.querySelector(`#num-${id}, #cli-${id}, #fecha-${id}`);
+  if (valor) card.querySelectorAll('.field-input').forEach(i => {
+    if (i.value) i.classList.remove('vacio');
+  });
+}
+
+// ── Toggle especial ────────────────────────────────────────────────
+async function toggleEspecial(id) {
+  const btn  = document.getElementById(`esp-${id}`);
+  const card = document.getElementById(`card-${id}`);
+  const activo = btn.classList.toggle('activo');
+
+  card.dataset.especial = activo;
+  if (activo) {
+    card.classList.add('especial');
+    card.querySelector('.card-stripe').style.background = 'var(--special)';
+  } else {
+    card.classList.remove('especial');
+    card.querySelector('.card-stripe').style.background = '';
+  }
+
+  await fetch(`/api/actualizar/${id}`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ especial: activo })
+  });
+}
+
+// ── Toggle excluir ─────────────────────────────────────────────────
+async function toggleExcluir(id) {
+  const btn  = document.getElementById(`exc-${id}`);
+  const card = document.getElementById(`card-${id}`);
+  const activo = btn.classList.toggle('activo');
+
+  card.dataset.excluir = activo;
+  card.classList.toggle('excluida', activo);
+
+  await fetch(`/api/actualizar/${id}`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ excluir: activo })
+  });
+}
+
+// ── Zoom imagen ────────────────────────────────────────────────────
+function zoomImg(src) {
+  document.getElementById('modal-img').src = '/static/' + src;
+  document.getElementById('modal').classList.add('visible');
+}
+
+function cerrarModal() {
+  document.getElementById('modal').classList.remove('visible');
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarModal(); });
+
+// ── Confirmar todo ─────────────────────────────────────────────────
+async function confirmarTodo() {
+  const btn = document.getElementById('btn-confirmar');
+  btn.disabled = true;
+  btn.textContent = 'Procesando...';
+
+  try {
+    const res  = await fetch('/api/confirmar', { method: 'POST' });
+    const data = await res.json();
+
+    mostrarToast(
+      '✓ Archivos procesados',
+      `${data.procesadas} facturas movidas · ${data.excluidas} excluidas`,
+      'exito'
+    );
+
+    // Marcar cards como procesadas
+    document.querySelectorAll('.card').forEach(c => {
+      if (c.dataset.excluir !== 'true') {
+        c.style.opacity = '.5';
+        c.style.pointerEvents = 'none';
+      }
+    });
+
+    btn.textContent = '✓ Completado';
+  } catch(e) {
+    mostrarToast('Error', e.message, 'error');
+    btn.disabled = false;
+    btn.textContent = 'Confirmar y mover archivos';
+  }
+}
+
+// ── Toast ──────────────────────────────────────────────────────────
+function mostrarToast(titulo, mensaje, tipo = '') {
+  const t = document.getElementById('toast');
+  document.getElementById('toast-title').textContent = titulo;
+  document.getElementById('toast-body').textContent  = mensaje;
+  t.className = `toast visible ${tipo}`;
+  setTimeout(() => t.classList.remove('visible'), 5000);
+}
+</script>
+</body>
+</html>
