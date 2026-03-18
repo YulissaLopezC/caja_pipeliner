@@ -9,7 +9,6 @@ import json
 import shutil
 import subprocess
 import sys
-import csv
 from pathlib import Path
 from datetime import datetime
 
@@ -186,23 +185,8 @@ def procesar_pdf(pdf_path: str) -> list:
         json.dump(facturas, f, ensure_ascii=False, indent=2)
 
     # Generar CSV resumen
-    OUTPUT_DIR.mkdir(exist_ok=True)
-    csv_path = OUTPUT_DIR / "resumen_facturas.csv"
-    with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=[
-            "numero_factura", "codigo_cliente", "fecha", "nombre_final"
-        ])
-        writer.writeheader()
-        for fac in facturas:
-            writer.writerow({
-                "numero_factura": fac.get("numero_factura", ""),
-                "codigo_cliente": fac.get("codigo_cliente", ""),
-                "fecha":          fac.get("fecha", ""),
-                "nombre_final":   fac.get("nombre_final", "")
-            })
 
     print(f"\n[✓] {len(facturas)} facturas procesadas")
-    print(f"[✓] CSV generado en {csv_path}")
     print(f"[✓] Estado guardado en {estado_path}")
     return facturas
 

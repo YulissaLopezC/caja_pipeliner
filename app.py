@@ -7,6 +7,7 @@ Luego abrir: http://localhost:5000
 import json
 import os
 import shutil
+import csv
 import webbrowser
 from pathlib import Path
 from threading import Timer
@@ -19,17 +20,36 @@ ESTADO_FILE = BASE_DIR / "estado.json"
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 
-
 def cargar_estado() -> list[dict]:
     if not ESTADO_FILE.exists():
         return []
-    with open(ESTADO_FILE, encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(ESTADO_FILE, encoding="utf-8") as f:
+            contenido = f.read().strip()
+        # Si hay contenido duplicado, quedarse solo con el primer JSON válido
+        decoder = json.JSONDecoder()
+        data, _ = decoder.raw_decode(contenido)
+        return data
+    except Exception as e:
+        print(f"[!] Error leyendo estado.json: {e}")
+        return []
 
 
 def guardar_estado(facturas: list[dict]):
+    # Limpiar caracteres de control inválidos del texto OCR
+    import re
+    def limpiar(obj):
+        if isinstance(obj, str):
+            return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', obj)
+        if isinstance(obj, dict):
+            return {k: limpiar(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [limpiar(i) for i in obj]
+        return obj
+
+    facturas_limpias = limpiar(facturas)
     with open(ESTADO_FILE, "w", encoding="utf-8") as f:
-        json.dump(facturas, f, ensure_ascii=False, indent=2)
+        json.dump(facturas_limpias, f, ensure_ascii=False, indent=2)
 
 
 @app.route("/")
@@ -125,6 +145,22 @@ def confirmar():
     ok      = sum(1 for r in resultados if r["estado"] == "ok")
     errores = [r for r in resultados if r["estado"] not in ("ok", "excluida")]
 
+    # Generar CSV con los datos finales confirmados
+    csv_path = OUTPUT_DIR / "resumen_facturas.csv"
+    with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.DictWriter(f, fieldnames=[
+            "numero_factura", "codigo_cliente", "fecha", "nombre_final"
+        ])
+        writer.writeheader()
+        for fac in facturas:
+            if not fac.get("excluir"):
+                writer.writerow({
+                    "numero_factura": fac.get("numero_factura", ""),
+                    "codigo_cliente": fac.get("codigo_cliente", ""),
+                    "fecha":          fac.get("fecha", ""),
+                    "nombre_final":   fac.get("nombre_final", "")
+                })
+
     return jsonify({
         "ok": True,
         "procesadas": ok,
@@ -142,7 +178,66 @@ def static_files(filename):
 def abrir_navegador():
     webbrowser.open("http://localhost:5000")
 
+@app.route("/api/unir", methods=["POST"])
+def unir():
+    """
+    Une dos páginas en un solo PDF.
+    La nota se agrega al final de la factura principal.
+    La nota queda marcada como excluida.
+    """
+    data = request.json
+    id_factura = data.get("id_factura")  # La factura principal
+    id_nota    = data.get("id_nota")     # La nota que se une
 
+    facturas = cargar_estado()
+
+    factura = next((f for f in facturas if f["id"] == id_factura), None)
+    nota    = next((f for f in facturas if f["id"] == id_nota), None)
+
+    if not factura or not nota:
+        return jsonify({"ok": False, "error": "Factura o nota no encontrada"})
+
+    archivo_factura = Path(factura["archivo_temp"])
+    archivo_nota    = Path(nota["archivo_temp"])
+
+    if not archivo_factura.exists() or not archivo_nota.exists():
+        return jsonify({"ok": False, "error": "Archivos temporales no encontrados"})
+
+    try:
+        import fitz
+
+        # Abrir ambos PDFs
+        doc_factura = fitz.open(str(archivo_factura))
+        doc_nota    = fitz.open(str(archivo_nota))
+
+        # Insertar la nota al final de la factura
+        doc_factura.insert_pdf(doc_nota)
+        doc_nota.close()
+
+        # Guardar en archivo temporal primero, luego reemplazar
+        temp_path = archivo_factura.parent / f"_temp_union_{archivo_factura.name}"
+        doc_factura.save(str(temp_path))
+        doc_factura.close()
+
+        # Reemplazar el original con el fusionado
+        import os
+        os.replace(str(temp_path), str(archivo_factura))
+
+        # Marcar la nota como excluida
+        for f in facturas:
+            if f["id"] == id_nota:
+                f["excluir"] = True
+                f["unida_con"] = factura["nombre_final"]
+
+        guardar_estado(facturas)
+        return jsonify({
+            "ok": True,
+            "mensaje": f"Nota unida a {factura['nombre_final']}"
+        })
+
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+    
 if __name__ == "__main__":
     OUTPUT_DIR.mkdir(exist_ok=True)
     if not ESTADO_FILE.exists():
