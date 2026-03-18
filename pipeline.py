@@ -30,7 +30,7 @@ POPPLER_PATH = r"C:\poppler\poppler-25.12.0\Library\bin"
 if os.path.exists(TESSERACT_CMD):
     pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
 
-RESUMEN_PAGES = 2  # Las primeras N páginas son resumen de caja (se omiten)
+RESUMEN_PAGES = 1  # Las primeras N páginas son resumen de caja (se omiten)
 
 
 # ── Limpieza ───────────────────────────────────────────────────────────────────
