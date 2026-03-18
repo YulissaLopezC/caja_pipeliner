@@ -7,152 +7,184 @@ Sistema automático para extraer, validar y organizar facturas desde el PDF de c
 ## Estructura del proyecto
 
 ```
-caja_pipeline/
+caja_v2/
 ├── run.py                  ← Lanzador principal (empieza aquí)
 ├── pipeline.py             ← Motor OCR y separación de PDF
 ├── app.py                  ← Servidor web de validación visual
 ├── gmail_watcher.py        ← Descarga automática desde Gmail
 ├── drive_uploader.py       ← Subida a Google Drive
+├── instalador.bat          ← Instalación automática en PC nuevo
+├── iniciar.bat             ← Acceso directo para uso diario
 │
-├── credentials/
-│   ├── gmail_credentials.json    ← OAuth2 de Gmail (tú lo descargas)
-│   └── service_account.json      ← Service Account de Drive (tú lo descargas)
+├── credentials/            ← Credenciales de Google (NO subir a GitHub)
+│   └── gmail_credentials.json
 │
-├── inbox/                  ← PDFs descargados de Gmail
-├── temp/                   ← Páginas separadas (temporal)
-├── output/                 ← Facturas renombradas y organizadas
-├── static/previews/        ← Miniaturas para la interfaz web
-└── templates/index.html    ← Interfaz de validación
+├── temp/                   ← Páginas temporales (se borran solas)
+├── output/                 ← Facturas renombradas + resumen_facturas.csv
+├── static/previews/        ← Miniaturas para la interfaz (se regeneran solas)
+└── templates/index.html    ← Interfaz de validación visual
 ```
 
 ---
 
-## Instalación (una sola vez)
+## Instalación en PC nuevo
 
-### 1. Instalar dependencias Python
+### Paso 1 — Instalar Python
+- Descarga desde: https://www.python.org/downloads/
+- ⚠️ Durante la instalación marca: **Add Python to PATH**
+- Verifica: `python --version`
 
-```bash
-pip install flask pymupdf pdf2image pytesseract pillow \
-            google-auth google-auth-oauthlib \
-            google-api-python-client
+### Paso 2 — Instalar Tesseract OCR
+- Descarga desde: https://github.com/UB-Mannheim/tesseract/wiki
+- Durante la instalación marca el idioma: **Spanish**
+- Busca la ruta del ejecutable:
+```
+where /r C:\ tesseract.exe
+```
+- Agrega esa carpeta al PATH de Windows
+- Descarga el idioma español desde:
+  https://github.com/tesseract-ocr/tessdata/blob/main/spa.traineddata
+- Guarda `spa.traineddata` en la carpeta `tessdata` de Tesseract
+- Verifica: `tesseract --version`
+
+### Paso 3 — Instalar Poppler
+- Descarga desde: https://github.com/oschwartz10612/poppler-windows/releases
+- Extrae en `C:\poppler\` → debe quedar: `C:\poppler\poppler-XX.XX.X\Library\bin\`
+- Agrega esa ruta al PATH de Windows
+- Verifica: `pdftoppm -v`
+
+### Paso 4 — Ejecutar el instalador
+- Extrae el proyecto en `C:\` (no dentro de OneDrive)
+- Doble clic en `instalador.bat`
+- Crea el entorno virtual e instala todas las librerías automáticamente
+
+### Paso 5 — Configurar rutas en pipeline.py
+Abre `pipeline.py` con el Bloc de notas y actualiza estas dos líneas:
+
+```python
+TESSERACT_CMD = r"C:\ruta\a\tesseract.exe"
+POPPLER_PATH  = r"C:\poppler\poppler-XX.XX.X\Library\bin"
 ```
 
-### 2. Instalar Tesseract OCR
+El instalador te muestra la ruta correcta de Tesseract al finalizar.
 
-Descarga desde: https://github.com/UB-Mannheim/tesseract/wiki
+---
 
-- Instala en: `C:\Program Files\Tesseract-OCR\`
-- Durante la instalación, marca el idioma **Spanish (spa)**
-- Verifica: abre CMD y ejecuta `tesseract --version`
+## Uso diario
 
-### 3. Instalar Poppler (para pdf2image)
+**La forma más simple — doble clic en `iniciar.bat`:**
+1. Arrastra el PDF de la caja a la ventana negra
+2. Presiona Enter
+3. Se abre el navegador con la interfaz de validación
+4. Revisa las facturas, corrige las que tengan ⚠
+5. Haz clic en **Confirmar y mover archivos**
 
-Descarga desde: https://github.com/oschwartz10612/poppler-windows/releases
+**O desde CMD (con el entorno virtual activo):**
+```
+cd C:\caja_v2
+venv\Scripts\activate
+python run.py --pdf "C:\ruta\al\CAJA_16-03-2026.pdf"
+```
 
-- Extrae en: `C:\poppler\`
-- Agrega `C:\poppler\Library\bin` a tu PATH de Windows
+Para subir a Drive después de confirmar:
+```
+python run.py --subir
+```
+
+---
+
+## Interfaz de validación (http://localhost:5000)
+
+- **Franja verde** = OCR leyó todo correctamente
+- **Franja naranja** = falta algún dato, revisar manualmente
+- **Franja azul** = corregida manualmente
+
+Acciones disponibles:
+- Editar número de factura, código de cliente o fecha directamente
+- **★ Especial** — marcar facturas para identificarlas fácilmente
+- **✕ Excluir** — excluir páginas que no son facturas de venta
+- Zoom — clic sobre la imagen para verla al 100%
+- **Confirmar y mover archivos** — mueve todo a `/output/`
+
+---
+
+## Archivos generados en /output/
+
+```
+output/
+├── H948.pdf
+├── H949.pdf
+├── H950.pdf
+└── resumen_facturas.csv    ← Resumen con número, cliente, fecha y nombre
+```
 
 ---
 
 ## Configuración de Gmail (una sola vez)
 
 1. Ve a https://console.cloud.google.com/
-2. Crea un proyecto nuevo → busca "Gmail API" → Habilitar
-3. Ve a **Credenciales** → **+ Crear credencial** → **ID de cliente OAuth 2.0**
+2. Crea un proyecto → busca **Gmail API** → Habilitar
+3. Credenciales → **+ Crear credencial** → **ID de cliente OAuth 2.0**
 4. Tipo: **Aplicación de escritorio**
 5. Descarga el JSON → guárdalo como `credentials/gmail_credentials.json`
-6. Ejecuta: `python run.py --setup-gmail`
-7. Se abrirá el navegador para autorizar el acceso → acepta
+6. Ejecuta:
+```
+python gmail_watcher.py --setup
+```
+7. Se abre el navegador → acepta los permisos
 
 ---
 
 ## Configuración de Google Drive (una sola vez)
 
-1. En Google Cloud Console → **Credenciales** → **+ Crear credencial** → **Cuenta de servicio**
-2. Dale un nombre → Crear
-3. En la cuenta de servicio → pestaña **Claves** → Agregar clave → JSON
-4. Guarda como `credentials/service_account.json`
-5. Abre tu carpeta raíz en Drive → **Compartir** → pega el email de la cuenta de servicio
-6. En `drive_uploader.py`, cambia `DRIVE_ROOT_ID` por el ID de tu carpeta:
-   - Abre la carpeta en Drive → la URL tiene: `https://drive.google.com/drive/folders/ESTE_ID`
+La conexión con Drive usa las mismas credenciales de Gmail (OAuth2).
 
----
-
-## Uso diario
-
-### Opción A — Flujo completo automático (recomendado)
-```bash
-python run.py
+1. Agrega el permiso de Drive en `gmail_watcher.py`:
+```python
+SCOPES = [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/drive"
+]
 ```
-Revisa Gmail → descarga el PDF → procesa → abre interfaz en el navegador.
-
-### Opción B — Procesar PDF local
-```bash
-python run.py --pdf "C:\Descargas\CAJA_16-03-2026.pdf"
-```
-
-### Opción C — Pasos separados
-```bash
-# 1. Procesar el PDF
-python pipeline.py "C:\Descargas\CAJA_16-03-2026.pdf"
-
-# 2. Abrir interfaz de validación
-python app.py
-
-# 3. Después de confirmar en la interfaz, subir a Drive
-python run.py --subir
-```
-
----
-
-## Interfaz de validación
-
-Al ejecutar `app.py` se abre automáticamente http://localhost:5000
-
-**Qué puedes hacer:**
-- Ver miniatura de cada factura
-- Corregir número, cliente o fecha si el OCR falló (campos en naranja = datos faltantes)
-- Marcar facturas como **★ Especial** (para identificarlas en Drive)
-- **✕ Excluir** facturas que no deben subirse (facturas de compra, abonos, etc.)
-- Filtrar por estado: todas / a revisar / especiales / excluidas
-- Hacer zoom en cualquier factura para verla al 100%
-- **Confirmar y mover archivos** → genera los PDFs finales en `/output/`
+2. Borra el token anterior: `del credentials\token.pickle`
+3. Vuelve a autorizar: `python gmail_watcher.py --setup`
+4. En `drive_uploader.py` verifica:
+   - `CARPETA_RAIZ_NOMBRE` = nombre exacto de tu carpeta raíz en Drive
+   - `AÑO_CARPETA` = año actual (ej: "2026")
+   - Las carpetas de clientes deben llamarse `CODIGO_NombreCliente` (ej: `9_Lanis Grill`)
 
 ---
 
 ## Ajustes importantes en pipeline.py
 
 ```python
-RESUMEN_PAGES = 2   # Número de páginas del resumen (omitidas al separar)
-TESSERACT_CMD = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+RESUMEN_PAGES = 2     # Páginas de resumen al inicio del PDF (se omiten)
+TESSERACT_CMD = r"..."  # Ruta a tesseract.exe
+POPPLER_PATH  = r"..."  # Ruta a la carpeta bin de Poppler
 ```
-
-Si tu PDF tiene 3 páginas de resumen, cambia `RESUMEN_PAGES = 3`.
 
 ---
 
-## Estructura de salida en /output/
+## Notas importantes
 
-```
-output/
-└── 9/
-    └── 2026-03/
-        └── H948.pdf
-└── 54/
-    └── 2026-03/
-        └── H949.pdf
-```
-
-Esta misma estructura se replica en Google Drive.
+- El proyecto **no debe estar dentro de OneDrive** — causa errores de permisos
+- El `venv/` no es portable entre PCs — siempre recrearlo con `instalador.bat`
+- Las credenciales de Google son únicas por cuenta — configurarlas en cada PC
+- `temp/` y `static/previews/` se limpian solas con cada ejecución
+- `output/` se acumula — bórrala después de confirmar que las facturas están en Drive
 
 ---
 
 ## Solución de problemas
 
 | Problema | Solución |
-|----------|----------|
-| OCR extrae texto incorrecto | Aumenta DPI en `pipeline.py`: `dpi=400` |
-| No encuentra Tesseract | Verifica `TESSERACT_CMD` en `pipeline.py` |
-| Error de Poppler | Verifica que `C:\poppler\Library\bin` esté en PATH |
-| Gmail no encuentra correos | Cambia `dias_atras=3` en `gmail_watcher.py` |
-| Carpeta Drive no encontrada | Verifica que el código de cliente coincida exactamente con el nombre de la carpeta |
+|---|---|
+| Ventana se cierra sola | Usar `iniciar.bat` — tiene `pause` al final |
+| `tesseract` no reconocido | Agregar carpeta de Tesseract al PATH |
+| `pdftoppm` no reconocido | Agregar carpeta bin de Poppler al PATH |
+| Error de Poppler en OCR | Verificar `POPPLER_PATH` en `pipeline.py` |
+| `ModuleNotFoundError` | Activar entorno virtual: `venv\Scripts\activate` |
+| `PermissionError` en temp | El proyecto está dentro de OneDrive — moverlo a `C:\` |
+| `pipeline.py` vacío | Volver a descargar el ZIP original |
+| Muestra facturas anteriores | Borrar `estado.json` y procesar PDF nuevo |
+| Entorno virtual roto | Borrar carpeta `venv\` y ejecutar `instalador.bat` |
